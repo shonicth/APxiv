@@ -36,6 +36,7 @@ namespace ArchipelagoXIV.Hooks
                 var name = value.Name.ToString().TrimEnd();
                 if (APData.FishData.ContainsKey(name))
                 {
+                    //DalamudApi.Echo($"Caught a {name}!");
                     var loc = apState.MissingLocations.FirstOrDefault(l => l.Name == name);
                     if (loc != null && loc.IsAccessible())
                     {
@@ -165,6 +166,7 @@ namespace ArchipelagoXIV.Hooks
             if (DalamudApi.ClientState.IsLoggedIn)
             {
                 ClientState_TerritoryChanged(DalamudApi.ClientState.TerritoryType);
+
             }
         }
 
@@ -174,6 +176,8 @@ namespace ArchipelagoXIV.Hooks
                 {
                 var territory = apState.territory = Data.Territories.First(row => row.RowId == e);
                 apState.territoryName = territory.PlaceName.Value.Name.ToString();
+                DalamudApi.Echo(territory.PlaceName.Value.Name.ToString());
+                DalamudApi.Echo(DalamudApi.DutyState.IsDutyStarted.ToString());
                 apState.territoryRegion = territory.PlaceNameRegion.Value.Name.ToString();
 
                 if (!apState.Connected)
@@ -197,6 +201,7 @@ namespace ArchipelagoXIV.Hooks
                 var duty = DalamudApi.DutyState.ContentFinderCondition.Value;
                 apState.territoryName = duty.Name.ToString();
                 apState.RefreshBars = true;
+                DalamudApi.Echo("Duty Start");
             }
         }
 
@@ -205,6 +210,7 @@ namespace ArchipelagoXIV.Hooks
             var duty = args.ContentFinderCondition.Value;
             apState.territoryName = duty.Name.ToString();
             apState.RefreshBars = true;
+            DalamudApi.Echo("Duty Start");
         }
 
         public unsafe void CheckAmnesty()
