@@ -11,18 +11,24 @@ namespace ArchipelagoXIV.Rando
 
         static RegionContainer()
         {
-            Menu = new Region("Menu", ["Limsa Lominsa", "Gridania", "Ul'dah", "Ishgard"]);
+            Menu = new Region("Menu", ["Limsa Lominsa", "Gridania", "Ul'dah"]);
+            Menu.Distance = 0;
             APData.LoadRegions();
             APData.LoadDutiesCsv();
             APData.LoadFatesCsv();
+            APData.LoadHuntsCsv();
             APData.LoadFish();
             APData.LoadRemoved();
         }
 
-        internal static void MarkStale()
+        internal static void MarkStale(bool reset)
         {
             foreach (var region in APData.Regions.Values) {
-                region.stale = true;
+                if (reset)
+                    region.Reachable = false;
+
+                if (!region.Reachable)
+                    region.stale = true;
             }
         }
 
@@ -53,8 +59,12 @@ namespace ArchipelagoXIV.Rando
 
                     region.Connections ??= region._connections.Select(n => APData.Regions.TryGetValue(n, out var r) ? r : null).OfType<Region>().ToArray();
                     foreach (var conn in region.Connections)
+                    {
                         if (!explored.Contains(conn))
                             queue.Enqueue(conn);
+                        if (conn.Distance == null || conn.Distance > region.Distance + 1)
+                            conn.Distance = region.Distance + 1;
+                    }
                 }
                 return false;
             }
@@ -67,11 +77,19 @@ namespace ArchipelagoXIV.Rando
             if (location?.region != null)
                 return CanReach(apState, location.region);
 
+            if (location is DutySubLocation subLocation)
+            {
+                name = subLocation.GetParent().Name;
+            }
+
             name = LocationToRegion(name, territoryId);
             if (!APData.Regions.TryGetValue(name, out var value))
             {
-                //DalamudApi.Echo($"Unknown Location {name} ({territoryId})");
-                return false;
+                if (!APData.Regions.TryGetValue(name, out value))
+                {
+                    DalamudApi.PluginLog.Warning($"Unknown Location {name} (tt={territoryId}, loc={location?.Name})");
+                    return false;
+                }
             }
             if (location != null)
                 location.region = value;
@@ -90,7 +108,7 @@ namespace ArchipelagoXIV.Rando
                 var duty = Data.GetDuty(territoryId);
                 if (duty.RowId > 0)
                 {
-                    name = duty.Name.ToString();
+                    name = duty.Name.ExtractText();
                     if (name.StartsWith("the"))
                         name = "The" + name[3..];
                     if (APData.Aliases.TryGetValue(name, out alias))
@@ -109,6 +127,8 @@ namespace ArchipelagoXIV.Rando
         public Func<ApState, bool, bool> MeetsRequirements;
         public Region[]? Connections = null;
         public string[] _connections;
+
+        public int? Distance = null;
 
         internal bool stale;
         internal bool Reachable;

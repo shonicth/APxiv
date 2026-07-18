@@ -22,8 +22,8 @@ from ..Helpers import get_option_value, is_option_enabled
 # Object classes from Manual -- extending AP core -- representing items and locations that are used in generation
 from ..Items import ManualItem, item_name_to_item
 from ..Locations import victory_names, location_name_to_location
-from .Data import BOSS_GOAL_DATA, CASTER, DOH, HEALERS, MELEE, RANGED, TANKS, WORLD_BOSSES, categorizedLocationNames, bait_to_fish, FILLER_EMOTES
-from .Helpers import get_int_value, is_fishing_enabled
+from .Data import BOSS_GOAL_DATA, CASTER, DOH, HEALERS, MELEE, RANGED, TANKS, UNREASONABLE_FATES, categorizedLocationNames, bait_to_fish, FILLER_NAMES, FILLER_WEIGHTS
+from .Helpers import get_int_value, is_fishing_enabled, get_excluded_jobs
 from .Options import LevelCap
 
 ########################################################################################
@@ -67,19 +67,26 @@ def get_duty_count(duty_type: str, duty_diff: int, multiworld: MultiWorld, playe
     if duty_type == "PvP":
         return None
     if duty_type == "Field Operation":
-        return None
+        return get_int_value(multiworld, player, "field_operation_critical_encounter_count")
     raise ValueError(f"Unknown duty type {duty_type}")
 
 # Use this function to change the valid filler items to be created to replace item links or starting items.
 # Default value is the `filler_item_name` from game.json
 def hook_get_filler_item_name(world: World, multiworld: MultiWorld, player: int) -> str | bool:
-    return world.random.choice(FILLER_EMOTES)
+    return world.random.choices(FILLER_NAMES, weights=FILLER_WEIGHTS)[0]
 
 def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> None:
     """
     This is the earliest hook called during generation, before anything else is done.
     Use it to check or modify incompatible options, or to set up variables for later use.
     """
+
+    excluded_jobs = get_excluded_jobs(multiworld, player)
+    force_jobs = get_option_value(multiworld, player, "force_jobs")
+    job_conflicts = [job for job in force_jobs if job in excluded_jobs]
+
+    if job_conflicts:
+        raise OptionError(f"Jobs cannot be both forced and excluded: {', '.join(sorted(job_conflicts))}")
 
     goal = victory_names[get_option_value(multiworld, player, 'goal')]  # type: ignore
     goal_location = next(loc for loc in location_table if loc.get('victory') and loc['name'] == goal)
@@ -92,21 +99,37 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
         slot_data = multiworld.re_gen_passthrough.get(world.game, {})
         world.mcguffins_needed = slot_data['mcguffins_needed']
     else:
-        world.mcguffins_needed = get_option_value(multiworld, player, "mcguffins_needed")
+        world.mcguffins_needed = 50
 
     if goal_level and goal_level > level_cap:
         raise OptionError(f"The selected goal '{goal}' requires level {goal_location.get('level')}, which exceeds the level cap of {level_cap}.")
 
-    has_fates = get_option_value(multiworld, player, 'fatesanity') or get_int_value(multiworld, player, 'fates_per_zone') > 0
+    has_fatesanity = get_option_value(multiworld, player, 'fatesanity')
+    fate_count = get_int_value(multiworld, player, 'fates_per_zone')
+    has_fates = has_fatesanity or fate_count > 0
     has_duties = get_int_value(multiworld, player, 'max_party_size') > 0 and get_int_value(multiworld, player, 'duty_difficulty') > 0
     has_dungeons = get_int_value(multiworld, player, 'dungeon_count') > 0 and has_duties
     has_fish = is_option_enabled(multiworld, player, 'fishsanity')
+    has_hunts = bool(get_option_value(multiworld, player, 'huntsanity'))
 
-    if not has_fates and not has_dungeons and not has_fish:
+    if not has_fates and not has_dungeons and not has_fish and not has_hunts:
         raise OptionError("You can't disable everything.")
 
-    if not has_dungeons and not has_fish and not get_option_value(multiworld, player, 'fatesanity') and get_int_value(multiworld, player, 'fates_per_zone') < 3:
+    if has_hunts and level_cap < 50:
+        raise OptionError("Huntsanity requires a level cap of at least 50.")
+
+    if has_hunts and not has_dungeons and not has_fish and (not has_fates or fate_count < 2):
+        raise OptionError("Enable at least 2 fates per zone, or other locations, to use huntsanity.")
+
+    if (
+        not has_dungeons
+        and not has_fish
+        and not has_fatesanity
+        and not has_hunts
+        and get_int_value(multiworld, player, 'fates_per_zone') < 3
+    ):
         world.options.fates_per_zone.value = 3
+
 
 
 # Called before regions and locations are created. Not clear why you'd want this, but it's here. Victory location is included, but Victory event is not placed yet.
@@ -120,6 +143,12 @@ def before_create_regions(world: World, multiworld: MultiWorld, player: int):
 
             if count is None:
                 continue
+
+            if dutyType == "Field Operation" and not is_option_enabled(multiworld, player, "include_duels"):
+                duels = [n for n in names if location_name_to_location[n].get('party', None) == 0]
+                names = [n for n in names if n not in duels]
+                world.skipped_duties.update(duels)
+
 
             count = min(len(names), count)
             used_names = world.random.sample(names, count)
@@ -152,17 +181,30 @@ def before_create_regions(world: World, multiworld: MultiWorld, player: int):
     world.random.shuffle(caster)
     world.random.shuffle(ranged)
     world.random.shuffle(doh)
+
+    exclude_jobs = get_excluded_jobs(multiworld, player)
+
+    if exclude_jobs:
+        tanks   = [j for j in tanks   if j not in exclude_jobs]
+        healers = [j for j in healers if j not in exclude_jobs]
+        melee   = [j for j in melee   if j not in exclude_jobs]
+        caster  = [j for j in caster  if j not in exclude_jobs]
+        ranged  = [j for j in ranged  if j not in exclude_jobs]
+        doh     = [j for j in doh     if j not in exclude_jobs]
+
     force_jobs = sorted(get_option_value(multiworld, player, "force_jobs"))
+
     if force_jobs:
         if len(force_jobs) > 5:
             world.random.shuffle(force_jobs)
             force_jobs = force_jobs[:5]
         prog_classes = force_jobs
     else:
-        prog_classes = [tanks[0], healers[0], melee[0], caster[0], ranged[0]]
+        prog_classes = [role[0] for role in [tanks, healers, melee, caster, ranged] if role]
+
     world.prog_classes = prog_classes
     world.prog_levels = [f"5 {job} Levels" for job in world.prog_classes]
-    world.prog_doh = doh[0]
+    world.prog_doh = doh[0] if doh else None
 
 # Called after regions and locations are created, in case you want to see or modify that information. Victory location is included.
 def after_create_regions(world: World, multiworld: MultiWorld, player: int):
@@ -170,7 +212,7 @@ def after_create_regions(world: World, multiworld: MultiWorld, player: int):
     locationNamesToExclude = []
     empty_regions = []
     if not is_option_enabled(multiworld, player, "include_unreasonable_fates"):
-        locationNamesToRemove.extend(WORLD_BOSSES)
+        locationNamesToRemove.extend(UNREASONABLE_FATES)
 
     level_cap = get_option_value(multiworld, player, "level_cap") or LevelCap.range_end
 
@@ -306,7 +348,7 @@ def before_create_items_all(item_config: dict[str, int|dict], world: World, mult
         world.mcguffins_needed = 0
     else:
         item_config['Memory of a Distant World'] = min(remaining // 4, 50)
-        world.mcguffins_needed = int(item_config['Memory of a Distant World'] * (get_int_value(multiworld, player, "mcguffins_needed") / 100))
+        world.mcguffins_needed = int(item_config['Memory of a Distant World'] * (get_int_value(multiworld, player, "mcguffin_percentage_needed") / 100))
     item_count += item_config['Memory of a Distant World']
 
     if is_fishing_enabled(multiworld, player):
@@ -328,7 +370,23 @@ def before_create_items_all(item_config: dict[str, int|dict], world: World, mult
 
     remaining = location_count - item_count
     if remaining > 0:
-        filler_levels = [f"5 {job} Levels" for job in TANKS + HEALERS + MELEE + CASTER + RANGED + DOH]
+        exclude_jobs = get_excluded_jobs(multiworld, player)
+
+        tanks = TANKS.copy()
+        healers = HEALERS.copy()
+        melee = MELEE.copy()
+        caster = CASTER.copy()
+        ranged = RANGED.copy()
+        doh = DOH.copy()
+        if exclude_jobs:
+            tanks   = [j for j in tanks   if j not in exclude_jobs]
+            healers = [j for j in healers if j not in exclude_jobs]
+            melee   = [j for j in melee   if j not in exclude_jobs]
+            caster  = [j for j in caster  if j not in exclude_jobs]
+            ranged  = [j for j in ranged  if j not in exclude_jobs]
+            doh     = [j for j in doh     if j not in exclude_jobs]
+
+        filler_levels = [f"5 {job} Levels" for job in tanks + healers + melee + caster + ranged + doh]
         world.random.shuffle(filler_levels)
         for name in filler_levels:
             item_config[name] = min(remaining, capped_count)
@@ -350,7 +408,7 @@ def before_create_items_filler(
 ) -> list:
     prog_levels = world.prog_levels
     start_class = world.random.choice(prog_levels)
-    prog_doh = f"5 {world.prog_doh} Levels"
+    prog_doh = f"5 {world.prog_doh} Levels" if world.prog_doh else ""
     level_cap = get_option_value(multiworld, player, "level_cap") or LevelCap.range_end
 
     seen_levels = {}

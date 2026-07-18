@@ -3,6 +3,8 @@ using System.Numerics;
 using ArchipelagoXIV.Rando;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
+using System.Linq;
+using ArchipelagoXIV.Rando.Locations;
 
 namespace ArchipelagoXIV.Windows;
 
@@ -34,7 +36,7 @@ public class MainWindow : Window
         if (!state.Connected)
         {
 
-            if (ImGui.Button($"Reconnect to {plugin.Configuration.Connection}"))
+            if (!plugin.Configuration.ConnectionHistory.Any() && ImGui.Button($"Reconnect to {plugin.Configuration.Connection}"))
             {
                 state.Connect(plugin.Configuration.Connection, plugin.Configuration.SlotName, plugin.Configuration.Password);
             }
@@ -49,7 +51,7 @@ public class MainWindow : Window
                 System.Diagnostics.Process.Start(psi);
             }
 
-            if (ImGui.Button("Join Support Discord"))
+            if (ImGui.Button("Join Unofficial Archipelago Discord"))
             {
                 var psi = new System.Diagnostics.ProcessStartInfo("https://discord.gg/TT4cZRHJ6F")
                 {
@@ -57,6 +59,18 @@ public class MainWindow : Window
                     Verb = "open"
                 };
                 System.Diagnostics.Process.Start(psi);
+            }
+            ImGui.Separator();
+            foreach (var item in plugin.Configuration.ConnectionHistory.ToArray())
+            {
+                if (ImGui.Button($"Reconnect to {item}"))
+                {
+                    var parts = item.Split("@");
+                    var address = parts[1];
+                    var player = parts[0].Split(":")[0];
+                    var password = parts[0].Split(":")[1];
+                    state.Connect(address, player, password);
+                }
             }
 
             return;
@@ -66,7 +80,10 @@ public class MainWindow : Window
         if (state.territoryName == null)
             return;
 
-        var canReach = RegionContainer.CanReach(state, state.territoryName, (ushort)state.territory.RowId);
+        var regionname = RegionContainer.LocationToRegion(state.territoryName, (ushort)state.territory.RowId);
+        var canReach = false;
+        if (APData.Regions.TryGetValue(regionname, out var value))
+            canReach = value.Reachable;
 
         ImGui.TextColored(canReach ? new Vector4(0.4f, 1f, 0.4f, 1f) : new Vector4(1f, 0.4f, 0.4f, 1f),
             $"Current location in logic: {canReach}");
@@ -89,7 +106,10 @@ public class MainWindow : Window
         //ImGui.Indent(55);
         foreach (var location in state.MissingLocations)
         {
-            if (location.IsAccessible())
+            if (location is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
+                continue;
+
+            if (location.Accessible)
             {
                 var name = location.DisplayText;
                 if (location.Name.EndsWith(" (FATE)"))

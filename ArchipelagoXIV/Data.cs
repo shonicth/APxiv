@@ -8,15 +8,21 @@ namespace ArchipelagoXIV
 {
     internal static partial class Data
     {
+        internal record NotoriousMonsterInfo(string Name, string Rank, string LocationName);
+        internal record AetheryteInfo(string Name, string Zone);
+
+        public static FrozenDictionary<string, AetheryteInfo> Aetherytes { get; private set; } = FrozenDictionary<string, AetheryteInfo>.Empty;
         public static TerritoryType[] Territories { get; private set; } = [];
         public static InstanceContent[] Duties { get; private set; } = [];
         public static ClassJob[] ClassJobs { get; private set; } = [];
         public static ContentFinderCondition[] Content { get; private set; } = [];
-        public static DynamicEvent[] DynamicEvents { get; private set; } = [];
+        public static FrozenDictionary<string, DynamicEvent> DynamicEvents { get; private set; } = FrozenDictionary<string, DynamicEvent>.Empty;
         public static ImmutableDictionary<uint, Item> Items { get; private set; } = null;
         public static IKDRoute[] IKDRoutes { get; private set; }
 
         public static FrozenDictionary<string, Fate> FateTable { get; private set; } = null;
+
+        public static FrozenDictionary<uint, NotoriousMonsterInfo> HuntTable { get; private set; } = FrozenDictionary<uint, NotoriousMonsterInfo>.Empty;
 
         public static Dictionary<string, int> FateLevels = new()
         {
@@ -78,6 +84,10 @@ namespace ArchipelagoXIV
             {"Shaaloani", 95},
             {"Heritage Found", 97},
             {"Living Memory", 99},
+
+            {"The Bozjan Southern Front", 71 },
+            {"Zadnor", 76},
+            {"The Occult Crescent: South Horn", 100},
         };
 
         public static Dictionary<string, string> DutyAliases = new()
@@ -135,12 +145,26 @@ namespace ArchipelagoXIV
             { "The Second Coil of Bahamut - Turn 4 (Savage)", "The Second Coil of Bahamut (Savage) - Turn 4"},
             { "Consigned Sealed and Undelivered (FATE)", "Consigned, Sealed, and Undelivered (FATE)"},
             { "Phallaina ", "Phallaina"},
+            // Aetheryte place names that don't match the actual aetheryte name
+            // Because the code happens in a detour, we'd rather hardcode these than do string manipulation at check time
+            { "Attune Crick", "Attune Onokoro" },
+            { "Attune Kugane Aetheryte Plaza", "Attune Kugane" },
+            { "Attune Old Sharlayan Aetheryte Plaza", "Attune Old Sharlayan" },
+            { "Attune Radz-at-Han Aetheryte Plaza", "Attune Radz-at-Han" },
+            { "Attune Tuliyollal Aetheryte Plaza", "Attune Tuliyollal" },
         };
 
         public static void Initialize() {
             var dataManager = DalamudApi.DataManager;
+
             if (dataManager == null)
                 return;
+
+            Aetherytes = dataManager.GetExcelSheet<Aetheryte>()
+                .Where(a => a.PlaceName.RowId > 10 && a.IsAetheryte)
+                .Select(a => new AetheryteInfo(a.PlaceName.Value.Name.ExtractText(), a.Map.Value.PlaceName.Value.Name.ExtractText()))
+                .ToFrozenDictionary(ae => ae.Name);
+
             Territories = [.. dataManager.GetExcelSheet<TerritoryType>()];
 
             Duties = [.. dataManager.GetExcelSheet<InstanceContent>()];
@@ -149,13 +173,25 @@ namespace ArchipelagoXIV
 
             Content = [.. dataManager.GetExcelSheet<ContentFinderCondition>()];
 
-            DynamicEvents = [.. dataManager.GetExcelSheet<DynamicEvent>()];
+            DynamicEvents = dataManager.GetExcelSheet<DynamicEvent>().Where(de => !de.Name.IsEmpty).ToFrozenDictionary(de => de.Name.ExtractText());
 
             Items = dataManager.GetExcelSheet<Item>().ToImmutableDictionary(i => i.RowId);
 
             IKDRoutes = [.. dataManager.GetExcelSheet<IKDRoute>()];
 
-            FateTable = DalamudApi.DataManager.GetExcelSheet<Fate>().DistinctBy(f => f.Name.ToString()).ToFrozenDictionary(f => f.Name.ToString().ToLower().Replace(",", "").Trim());
+            FateTable = dataManager.GetExcelSheet<Fate>().DistinctBy(f => f.Name.ToString()).ToFrozenDictionary(f => f.Name.ToString().ToLower().Replace(",", "").Trim());
+
+            HuntTable = dataManager.GetExcelSheet<NotoriousMonster>()
+                .Where(nm => nm.Rank is 1 or 2 or 3 && nm.BNpcName.RowId != 0)
+                .DistinctBy(nm => nm.BNpcName.RowId)
+                .ToFrozenDictionary(
+                    nm => nm.BNpcName.RowId,
+                    nm =>
+                    {
+                        var name = nm.BNpcName.Value.Singular.ToString();
+                        var rank = nm.Rank switch { 1 => "B", 2 => "A", _ => "S" };
+                        return new NotoriousMonsterInfo(name, rank, $"Hunt {name}");
+                    });
         }
 
         public static ContentFinderCondition GetDuty(uint territoryId) {

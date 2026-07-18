@@ -40,16 +40,15 @@ namespace ArchipelagoXIV.Rando
             { "Shirogane", "Kugane" },
             { "Empyreum", "Ishgard" },
             // Gold Saucer
-            { "The Gold Saucer", "Southern Thanalan" },
-            { "Chocobo Square", "Southern Thanalan" },
-            { "The Battlehall", "Southern Thanalan" },
+            { "Chocobo Square", "The Gold Saucer" },
+            { "The Battlehall", "The Gold Saucer" },
             // Instanced Zone
             { "The Waking Sands", "Western Thanalan" },
             { "Fortemps Manor", "Ishgard" },
-            { "Matoya's Cave", "The Dravnian Hinterlands" },
+            { "Sacrificial Chamber", "The Dravanian Forelands" },
+            { "Matoya's Cave", "The Dravanian Hinterlands" },
             { "The Lightfeather Proving Grounds", "Ishgard" },
             { "Ruby Bazaar Offices", "Kugane" },
-            { "The Doman Enclave", "Yanxia" },
             { "The Omphalos", "Mor Dhona"  },
             { "Main Hall", "Old Sharlayan" },
             { "Elysion", "Ultima Thule"},
@@ -63,6 +62,7 @@ namespace ArchipelagoXIV.Rando
             { 1, "The Thousand Maws of Toto-Rak" }, // Yes, this is correct.
             { 2, "The Tam-Tara Deepcroft" },
             { 24, "The Tam-Tara Deepcroft (Hard)" },
+            { 1066, "The Merchant's Tale" },
         };
 
         public static Dictionary<string, ushort> CheckNameToContentID = new()
@@ -70,13 +70,16 @@ namespace ArchipelagoXIV.Rando
             { "The Thousand Maws of Toto-Rak", 1 },
             { "The Tam-Tara Deepcroft", 2 },
             { "The Tam-Tara Deepcroft (Hard)", 24 },
+            { "The Merchant's Tale", 1066 },
         };
 
         public static readonly Dictionary<string, Region> Regions = [];
         public static readonly Dictionary<string, FishData> FishData = [];
         public static readonly Dictionary<string, int> FateData = [];
+        public static readonly Dictionary<string, int> HuntData = [];
+        public static readonly Dictionary<string, string> HuntRankData = [];
 
-        public static Dictionary<string, Dictionary<string, string>> ObsoleteChecks { get; private set; }
+        public static Dictionary<string, Dictionary<string, string>> ObsoleteChecks { get; private set; } = [];
 
         public static void LoadDutiesCsv()
         {
@@ -100,7 +103,7 @@ namespace ArchipelagoXIV.Rando
             using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArchipelagoXIV.fates.csv");
             using var reader = new StreamReader(stream);
             string? line = null;
-            
+
             while ((line = reader.ReadLine()) != null)
             {
                 Regex CSVParser = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
@@ -129,6 +132,31 @@ namespace ArchipelagoXIV.Rando
                     name += " (FATE)";
                 Aliases[name] = zone.Trim();
                 FateData[name] = level;
+            }
+        }
+
+        public static void LoadHuntsCsv()
+        {
+            // hunts.csv columns: BNpcNameId,Name,Rank,Location,Level,Expansion
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArchipelagoXIV.hunts.csv");
+            using var reader = new StreamReader(stream);
+            Regex CSVParser = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
+            string? line = null;
+
+            while ((line = reader.ReadLine()) != null)
+            {
+                var row = CSVParser.Split(line);
+                if (row[0].Trim() == "BNpcNameId")
+                    continue;
+
+                var name = $"Hunt {row[1].Trim()}";
+                var rank = row[2].Trim();
+                var zone = row[3].Trim();
+                var level = int.Parse(row[4].Trim());
+
+                Aliases[name] = zone;
+                HuntData[name] = level;
+                HuntRankData[name] = rank;
             }
         }
 
@@ -168,7 +196,6 @@ namespace ArchipelagoXIV.Rando
             foreach (JObject fish in fishsanity)
             {
                 var zones = fish.Value<JObject>("zones");
-                Console.WriteLine(zones);
                 var intuition = fish.Value<JObject>("logical_intuition");
                 List<string> zoneNames = [];
                 List<string> baits = [];
@@ -190,31 +217,16 @@ namespace ArchipelagoXIV.Rando
                 }
                 baits = baits.Distinct().ToList();
                 intuitionbaits = intuitionbaits.Distinct().ToList();
-                //if (intuitionbaits.Count == 0)
-                //{
-                    var data = new FishData
-                    {
-                        Level = (int)Math.Floor(fish.Value<int>("lvl") / 5.0) * 5,
-                        Id = fish.Value<int>("id"),
-                        Baits = [.. baits],
-                        Intuition = [.. intuitionbaits],
-                        Regions = zoneNames.Select(z => Regions[z]).ToArray(),
-                    };
-                    APData.FishData[fish.Value<string>("name")] = data;
-                //}
-                //else
-                //{
-                //    var data = new FishData
-                //    {
-                //        Level = (int)Math.Floor(fish.Value<int>("lvl") / 5.0) * 5,
-                //        Id = fish.Value<int>("id"),
-                //        Baits = [.. baits],
-                //        //Intuition = [.. intuitionbaits],
-                //        Regions = zoneNames.Select(z => Regions[z]).ToArray(),
-                //    };
-                //    APData.FishData[fish.Value<string>("name")] = data;
-                //}
-                
+                var data = new FishData
+                {
+                    Level = (int)Math.Floor(fish.Value<int>("lvl") / 5.0) * 5,
+                    Id = fish.Value<int>("id"),
+                    Baits = [.. baits],
+                    Intuition = [.. intuitionbaits],
+                    Regions = zoneNames.Select(z => Regions[z]).ToArray(),
+                };
+                APData.FishData[fish.Value<string>("name")] = data;
+
             }
         }
     }

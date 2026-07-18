@@ -24,6 +24,9 @@ namespace ArchipelagoXIV.Rando
                          select HasItem(m.Groups[0].Value)).ToArray();
             if (rules.Length != 0)
                 return (state, asCurrentClass) => rules.All(r => r(state, asCurrentClass));
+            if (string.IsNullOrEmpty(requires))
+                return Always();
+            DalamudApi.Echo($"Could not parse Requires string: {requires}");
             return Always();
         }
 
@@ -50,6 +53,11 @@ namespace ArchipelagoXIV.Rando
         {
             var gLevel = asCurrentClass ? state.Game.MaxLevel(state.lastJob) : state.Game.MaxLevelDHL();
             return gLevel >= level;
+        };
+
+        internal static Func<ApState, bool, bool>? And(params Func<ApState, bool, bool>?[] rules) => (state, asCurrentClass) =>
+        {
+            return rules.Where(r => r != null).All(r => r!(state, asCurrentClass));
         };
     }
 }
