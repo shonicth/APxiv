@@ -248,7 +248,8 @@
 			"The Sea of Clouds",
 			"Azys Lla",
             "The Firmament",
-            "The Diadem"
+            "The Diadem",
+            "Empyreum"
 		]
 	},
     "Foundation": {
@@ -505,7 +506,9 @@
     },
     "Sinus Ardorum": {
         "requires": "",
-        "connects_to": []
+        "connects_to": [
+			"Phaenna"
+		]
     },
     "Phaenna": {
         "requires": "",
@@ -538,6 +541,9 @@
         "connects_to": []
     },
     "The Firmament": {
+        "connects_to": []
+    },
+    "Empyreum": {
         "connects_to": []
     },
     "Mist": {
