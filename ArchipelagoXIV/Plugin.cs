@@ -123,6 +123,13 @@ namespace ArchipelagoXIV
                     apState.RefreshBars = false;
                 }
 
+                if (apState.Syncing)
+                {
+                    apState.Syncing = false;
+
+                    await apState.SyncLocations();
+                }
+
                 await Task.Delay(1000, cancellationToken);
             }
         }
