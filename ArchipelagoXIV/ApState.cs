@@ -144,7 +144,7 @@ namespace ArchipelagoXIV
             if (!result.Successful)
             {
                 var failure = result as LoginFailure;
-                foreach (var e in failure.Errors)
+                foreach (var e in failure!.Errors)
                     DalamudApi.Echo(e);
                 if (failure.ErrorCodes.Length != 0 && failure.ErrorCodes.First() == ConnectionRefusedError.InvalidGame)
                 {
@@ -179,7 +179,7 @@ namespace ArchipelagoXIV
             config.GameName = this.Game.Name;
             config.SlotName = slotName;
             config.Connection = address;
-            config.Password = password;
+            config.Password = password ?? "";
             config.AddToConnectionHistory();
             config.Save();
             this.DeathLink = session.CreateDeathLinkService();
@@ -344,51 +344,53 @@ namespace ArchipelagoXIV
             {
                 this.CurrentLocationInLogic = RegionContainer.CanReach(this, region);
                 zoneTT.AppendLine($"Available Checks in {region.Name}:");
-                foreach (var l in MissingLocations)
+            }
+
+            foreach (var l in MissingLocations)
+            {
+                if (l.Completed)
                 {
-                    if (l.Completed)
-                    {
+                    continue;
+                }
+                if (l.region == region)
+                {
+                    if (l is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
                         continue;
-                    }
-                    if (l.region == region)
-                    {
-                        if (l is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
-                            continue;
 
-                        if (l.IsAccessible())
+                    if (l.IsAccessible())
+                    {
+                        zoneTT.AppendLine(l.DisplayText);
+                        checks++;
+                        if (l is FateLocation)
+                            fates++;
+                        if (DalamudApi.FateTable.Any(f => f.Name.ToString().Equals(l.Name.Replace(" (FATE)", ""), StringComparison.OrdinalIgnoreCase)))
                         {
-                            zoneTT.AppendLine(l.DisplayText);
-                            checks++;
-                            if (l is FateLocation)
-                                fates++;
-                            if (DalamudApi.FateTable.Any(f => f.Name.ToString().Equals(l.Name.Replace(" (FATE)", ""), StringComparison.OrdinalIgnoreCase)))
+                            upfates++;
+                            activeFates.AppendLine(l.Name);
+                            if (this.lastUpFateCount == 0)
                             {
-                                upfates++;
-                                activeFates.AppendLine(l.Name);
-                                if (this.lastUpFateCount == 0)
-                                {
-                                    DalamudApi.ShowToast($"{l.Name} is up");
-                                    DalamudApi.Echo($"{l.Name} is up");
-                                    UIGlobals.PlayChatSoundEffect(3);
-                                }
+                                DalamudApi.ShowToast($"{l.Name} is up");
+                                DalamudApi.Echo($"{l.Name} is up");
+                                UIGlobals.PlayChatSoundEffect(3);
                             }
+                        }
 
-                            BK = false;
-                        }
-                        else
-                        {
-                            unavailable.AppendLine(l.DisplayText + "(Unavailable)");
-                        }
-                    }
-                    else if (l.IsAccessible())
-                    {
-                        zoneswithchecks.Add(l.region);
                         BK = false;
                     }
-                    if (!fish && l is Fish)
-                        fish = true;
+                    else
+                    {
+                        unavailable.AppendLine(l.DisplayText + "(Unavailable)");
+                    }
                 }
+                else if (l.IsAccessible())
+                {
+                    zoneswithchecks.Add(l.region);
+                    BK = false;
+                }
+                if (!fish && l is Fish)
+                    fish = true;
             }
+            
             if (upfates > 0)
             {
                 zoneTT.Insert(0, "Active Fates:\n" + activeFates.ToString() + '\n');
@@ -422,6 +424,8 @@ namespace ArchipelagoXIV
             {
                 DalamudApi.SetStatusBar($"??? ({this.territoryName})");
             }
+            else if (Loading)
+                DalamudApi.SetStatusBar("Loading...");
             else if (BK)
                 DalamudApi.SetStatusBar("BK");
             else if (this.CurrentLocationInLogic)
