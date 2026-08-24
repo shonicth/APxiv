@@ -31,7 +31,9 @@ namespace ArchipelagoXIV.Rando
             { "The Hourglass", "Ul'dah"},
             { "Cloud Nine", "Ishgard"},
             { "Bokairo Inn", "Kugane"},
+            { "The Pendants Personal Suite", "The Crystarium"},
             { "Andron", "Old Sharlayan"},
+            { "The For'ard Cabins", "Tuliyollal"},
             // Gold Saucer
             { "Chocobo Square", "The Gold Saucer" },
             { "The Battlehall", "The Gold Saucer" },
@@ -67,6 +69,7 @@ namespace ArchipelagoXIV.Rando
         };
 
         public static readonly Dictionary<string, Region> Regions = [];
+        public static readonly Dictionary<uint, Region> RegionsByTerritoryType = [];
         public static readonly Dictionary<string, FishData> FishData = [];
         public static readonly Dictionary<string, int> FateData = [];
         public static readonly Dictionary<string, int> HuntData = [];
@@ -85,6 +88,8 @@ namespace ArchipelagoXIV.Rando
                 var row = line.Split(',');
                 if (headers.Contains(row[0].Trim()))
                     continue;
+                if (row[0].StartsWith('"'))
+                    row[0] = row[0].Trim('"');
                 Aliases[row[0].Trim()] = row[4].Trim();
             }
         }
@@ -118,7 +123,7 @@ namespace ArchipelagoXIV.Rando
 
                 var level = int.Parse(row[1].Trim());
                 level = Math.Max(level - 5, (int)Math.Floor(level / 10.0) * 10);
-                var zone = row[2];
+                var zone = row[2].Trim();
                 if (zone == "The Firmament")
                     name += " (FETE)";
                 else if (!name.EndsWith("(FATE)"))
@@ -167,7 +172,8 @@ namespace ArchipelagoXIV.Rando
                 var requires = region.Value.Value<string>("requires");
                 if (requires != null)
                     rule = Logic.FromString(requires);
-                _ = new Region(region.Key, connections.ToArray() ?? [], rule);
+                var territoryTypeIds = region.Value["ids"]?.ToObject<uint[]>() ?? [];
+                _ = new Region(region.Key, connections.ToArray() ?? [], rule, territoryTypeIds);
             }
         }
 

@@ -53,7 +53,6 @@ namespace ArchipelagoXIV
 
         public TerritoryType territory { get; internal set; }
         public string territoryName { get; internal set; }
-        public string territoryRegion { get; internal set; }
 
         public bool CanTeleport { get; internal set; } = true;
         public bool CanReturn { get; internal set; } = true;
@@ -69,6 +68,7 @@ namespace ArchipelagoXIV
                 if (!localPlayer.IsLoaded)
                     return null;
                 var job = localPlayer.ClassJob.Value;
+                job = DalamudApi.DataManager.GetExcelSheet<ClassJob>(Dalamud.Game.ClientLanguage.English).First(r => r.RowId == job.RowId); // Convert to English
                 this.lastJob = job;
                 var sb = new StringBuilder();
 
@@ -121,14 +121,12 @@ namespace ArchipelagoXIV
             }
             DalamudApi.SetStatusBar("Connecting...");
             var localPlayer = DalamudApi.PlayerState;
-            if (localPlayer == null || !localPlayer.ClassJob.IsValid)
-                return;
 
             this.session = ArchipelagoSessionFactory.CreateSession(address);
             this.session.MessageLog.OnMessageReceived += MessageLog_OnMessageReceived;
             if (string.IsNullOrEmpty(player))
             {
-                player = localPlayer.CharacterName.ToString();
+                player = localPlayer?.CharacterName?.ToString() ?? "";
             }
             DeathLinkEnabled = false;
             var tags = new string[] { "Dalamud" };
@@ -147,7 +145,7 @@ namespace ArchipelagoXIV
             if (!result.Successful)
             {
                 var failure = result as LoginFailure;
-                foreach (var e in failure.Errors)
+                foreach (var e in failure!.Errors)
                     DalamudApi.Echo(e);
                 if (failure.ErrorCodes.Length != 0 && failure.ErrorCodes.First() == ConnectionRefusedError.InvalidGame)
                 {
@@ -182,7 +180,7 @@ namespace ArchipelagoXIV
             config.GameName = this.Game.Name;
             config.SlotName = slotName;
             config.Connection = address;
-            config.Password = password;
+            config.Password = password ?? "";
             config.AddToConnectionHistory();
             config.Save();
             this.DeathLink = session.CreateDeathLinkService();
@@ -347,51 +345,53 @@ namespace ArchipelagoXIV
             {
                 this.CurrentLocationInLogic = RegionContainer.CanReach(this, region);
                 zoneTT.AppendLine($"Available Checks in {region.Name}:");
-                foreach (var l in MissingLocations)
+            }
+
+            foreach (var l in MissingLocations)
+            {
+                if (l.Completed)
                 {
-                    if (l.Completed)
-                    {
+                    continue;
+                }
+                if (l.region == region)
+                {
+                    if (l is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
                         continue;
-                    }
-                    if (l.region == region)
-                    {
-                        if (l is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
-                            continue;
 
-                        if (l.IsAccessible())
+                    if (l.IsAccessible())
+                    {
+                        zoneTT.AppendLine(l.DisplayText);
+                        checks++;
+                        if (l is FateLocation)
+                            fates++;
+                        if (DalamudApi.FateTable.Any(f => f.Name.ToString().Equals(l.Name.Replace(" (FATE)", ""), StringComparison.OrdinalIgnoreCase)))
                         {
-                            zoneTT.AppendLine(l.DisplayText);
-                            checks++;
-                            if (l is FateLocation)
-                                fates++;
-                            if (DalamudApi.FateTable.Any(f => f.Name.ToString().Equals(l.Name.Replace(" (FATE)", ""), StringComparison.OrdinalIgnoreCase)))
+                            upfates++;
+                            activeFates.AppendLine(l.Name);
+                            if (this.lastUpFateCount == 0)
                             {
-                                upfates++;
-                                activeFates.AppendLine(l.Name);
-                                if (this.lastUpFateCount == 0)
-                                {
-                                    DalamudApi.ShowToast($"{l.Name} is up");
-                                    DalamudApi.Echo($"{l.Name} is up");
-                                    UIGlobals.PlayChatSoundEffect(3);
-                                }
+                                DalamudApi.ShowToast($"{l.Name} is up");
+                                DalamudApi.Echo($"{l.Name} is up");
+                                UIGlobals.PlayChatSoundEffect(3);
                             }
+                        }
 
-                            BK = false;
-                        }
-                        else
-                        {
-                            unavailable.AppendLine(l.DisplayText + "(Unavailable)");
-                        }
-                    }
-                    else if (l.IsAccessible())
-                    {
-                        zoneswithchecks.Add(l.region);
                         BK = false;
                     }
-                    if (!fish && l is Fish)
-                        fish = true;
+                    else
+                    {
+                        unavailable.AppendLine(l.DisplayText + "(Unavailable)");
+                    }
                 }
+                else if (l.IsAccessible())
+                {
+                    zoneswithchecks.Add(l.region);
+                    BK = false;
+                }
+                if (!fish && l is Fish)
+                    fish = true;
             }
+            
             if (upfates > 0)
             {
                 zoneTT.Insert(0, "Active Fates:\n" + activeFates.ToString() + '\n');
@@ -425,6 +425,8 @@ namespace ArchipelagoXIV
             {
                 DalamudApi.SetStatusBar($"??? ({this.territoryName})");
             }
+            else if (Loading)
+                DalamudApi.SetStatusBar("Loading...");
             else if (BK)
                 DalamudApi.SetStatusBar("BK");
             else if (this.CurrentLocationInLogic)
@@ -527,7 +529,7 @@ namespace ArchipelagoXIV
                 return;
             }
 
-            if (hard || MissingLocations == null || MissingLocations.Length == 0)
+            if (hard || AllLocations == null || AllLocations.Length == 0)
             {
                 AllLocations = [.. session!.Locations.AllLocations.Select(i => Location.Create(this, i))];
                 MissingLocations = [.. AllLocations.Where(l => !l.Completed && session!.Locations.AllMissingLocations.Contains(l.ApId))];

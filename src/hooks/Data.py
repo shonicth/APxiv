@@ -2,8 +2,8 @@ import csv
 import json
 import pkgutil
 import re
-from typing import Any
 from itertools import chain
+from typing import Any, NotRequired, TypedDict, cast
 
 # Location ID Starts
 # 1-7999: Duties
@@ -16,6 +16,31 @@ from itertools import chain
 # 45,000-49,999: Hunt Marks (Huntsanity)
 # 50,000-54,999: Aetherite Locations
 
+# Item ID Starts
+# 1-999:  Access Keys
+# 1000-4999: Bait
+# 5000-9999: Class Level Items
+# 10,000-10,999: Deep Dungeon items
+# 40,000-40,999: Boss Clear events.  These don't technically need IDs, but currently do due to a manual bug.
+# 999,000-999,999: Filler items
+
+class LocationDict(TypedDict):
+    name: str
+    region: str
+    category: NotRequired[list[str]]
+    requires: NotRequired[str]
+    level: NotRequired[int | str]
+    id: NotRequired[int]
+    duty_name: NotRequired[str | None]
+    party: NotRequired[int | None]
+    diff: NotRequired[int | None]
+    extra_number: NotRequired[int | None]
+    expansion: NotRequired[str | None]
+    filler: NotRequired[bool | None]
+    victory: NotRequired[bool | None]
+    is_dungeon: NotRequired[bool | None]
+    rank: NotRequired[str | None]
+    fate_number: NotRequired[int]
 
 # called after the game.json file has been loaded
 def after_load_game_file(game_table: dict) -> dict:
@@ -30,6 +55,41 @@ CASTER = ["BLM","SMN","RDM","PCT"]
 RANGED = ["BRD","MCH","DNC"]
 DOH = ["CRP", "BSM", "ARM", "GSM", "LTW", "WVR", "ALC", "CUL"]
 DOL = ["MIN", "BTN", "FSH"]
+
+JOB_FULL_NAMES = {
+    "PLD": "Paladin",
+    "WAR": "Warrior",
+    "DRK": "Dark Knight",
+    "GNB": "Gunbreaker",
+    "WHM": "White Mage",
+    "SCH": "Scholar",
+    "AST": "Astrologian",
+    "SGE": "Sage",
+    "MNK": "Monk",
+    "DRG": "Dragoon",
+    "NIN": "Ninja",
+    "SAM": "Samurai",
+    "RPR": "Reaper",
+    "VPR": "Viper",
+    "BST": "Beastmaster",
+    "BLM": "Black Mage",
+    "SMN": "Summoner",
+    "RDM": "Red Mage",
+    "BLU": "Blue Mage",
+    "PCT": "Pictomancer",
+    "BRD": "Bard",
+    "MCH": "Machinist",
+    "DNC": "Dancer",
+    "FSH": "Fisher",
+}
+
+FULL_NAME_TO_JOB = {v: k for k, v in JOB_FULL_NAMES.items()}
+
+LEVEL_CAP = 100
+LIMITED_LEVEL_CAPS = {
+    "BLU": 80,
+    "BST": 50,
+}
 
 BOSS_GOAL_DATA: dict[str, tuple[str, str, int]] = {
     # Goal: (Name, Region, Level)
@@ -161,17 +221,19 @@ fate_zones = {
     "The Bozjan Southern Front": [71],
     "Zadnor": [76],
     "The Occult Crescent: South Horn": [100],
+    "The Occult Crescent: North Horn": [100],
 }
 
 bait_to_fish: dict[str, set[str]] = {}
 
 expansion_regex = re.compile(r"^(.*?) \(([^\)]+)\)$")
+deep_dungeon_regex = re.compile(r"^(?P<dd_name>.+?) \((?P<floor_name>\w+)s (?P<start>\d+)-\d+\)$")
 
-def generate_victory_locations() -> list[dict]:
+def generate_victory_locations() -> list[LocationDict]:
     # Build victory location entries from BOSS_GOAL_KEY_LOCATIONS
     # to preserve existing location IDs for backwards compatibility
     _id = 40_000
-    locations = []
+    locations: list[LocationDict] = []
 
     for goal_name, (_, region, level) in BOSS_GOAL_DATA.items():
         locations.append({"name": goal_name, "region": region, "level": level, "victory": True, "id": _id})
@@ -190,10 +252,10 @@ def get_duty_expansion(category: str) -> tuple[str, str]:
 
 categorizedLocationNames: dict[tuple[str, str, int], list[str]] = {}  # (dutyType, dutyExpansion, dutyDifficulty) -> [locationName, ...]
 
-def generate_duty_list() -> tuple[list[dict], list[dict]]:
-    duty_list = []
-    extra_list = []
-    difficulties = ["None", "Normal", "Extreme", "Savage", "Endgame", "Ultimate"]
+def generate_duty_list() -> tuple[list[LocationDict], list[LocationDict]]:
+    duty_list: list[LocationDict] = []
+    extra_list: list[LocationDict] = []
+    difficulties = ["None", "Normal", "Extreme", "Savage", "Endgame", "Ultimate", "Disabled"]
     sizes = ["Solo", "Light Party", "Full Party", "Alliance"]
     dutyreader = csv.DictReader(pkgutil.get_data(__name__, "duties.csv").decode().splitlines(), delimiter=',', quotechar='"')
     _id = 0
@@ -205,7 +267,7 @@ def generate_duty_list() -> tuple[list[dict], list[dict]]:
         if row["Name"] not in HEADER_VALUES:
             requires_str = "{anyClassLevel(" + row["Level Sync"] + ")}"
             requires_str += (" and |" + row["Req Spells"] + "|") if  (row["Req Spells"] != "") else ""
-            location = {
+            location: LocationDict = {
                     "name": row["Name"],
                     "duty_name": row["Name"],
                     "region": row["Location"],
@@ -220,6 +282,13 @@ def generate_duty_list() -> tuple[list[dict], list[dict]]:
             if expansion is not None:
                 location["expansion"] = expansion
             category = row["Category"]
+
+            if category == 'PvP':
+                if row['Req Size'] == 'Solo':
+                    location["category"].append("Crystalline Conflict")
+                elif row['Req Size'] == 'Alliance':
+                    location["category"].append("Frontline")
+
             if category.startswith("Variant Dungeon"):
                 category = category.replace("Variant Dungeon", "Dungeon")
             if category != prev_category:
@@ -230,13 +299,32 @@ def generate_duty_list() -> tuple[list[dict], list[dict]]:
                 location["category"].append("Bozja")
             if row["Location"] in ["The Occult Crescent: South Horn", "The Occult Crescent: North Horn"]:
                 location["category"].append("Occult Crescent")
+            if row["Location"] in ["The Palace of the Dead"]:
+                location["category"].append("The Palace of the Dead")
+            if row["Location"] in ["Heaven-on-High"]:
+                location["category"].append("Heaven-on-High")
+            if row["Location"] in ["Eureka Orthos"]:
+                location["category"].append("Eureka Orthos")
+            if row["Location"] in ["Pilgrim's Traverse"]:
+                location["category"].append("Pilgrim's Traverse")
             duty_list.append(location)
             categorizedLocationNames.setdefault((content_type, expansion, location["diff"]), []).append(row["Name"])
             if "Dungeon" in row["Category"]:
-                for i in range(1, 10):
+                for i in range(1, 10): # TODO: This should be 11.  But it's a breaking change, so we're waiting for 8.0
+                    name = f"{row['Name']} {i + 1}"
+                    if "Deep Dungeon" in row["Category"]:
+                        m = deep_dungeon_regex.match(row["Name"])
+                        if m:
+                            dd_name = m['dd_name']
+                            dd_floor_name = m['floor_name']
+                            start_floor = int(m['start'])
+                            name = f"{dd_name} {dd_floor_name} {i - 1 + start_floor}"
+                        else:
+                            raise ValueError(f"Deep Dungeon name '{row['Name']}' does not match expected format. Please fix either the duty name or the regex.")
+
                     extra_list.append({
                         "id": _xid,
-                        "name": f"{row["Name"]} {i + 1}",
+                        "name": name,
                         "duty_name": row["Name"],
                         "region": row["Location"],
                         "category": [row["Category"], row["Location"]],
@@ -252,8 +340,8 @@ def generate_duty_list() -> tuple[list[dict], list[dict]]:
     duty_list[0]["id"] = 4  # Mistakes were made, and they're not worth fixing at this point.
     return duty_list, extra_list
 
-def generate_fate_list():
-    fate_list = []
+def generate_fate_list() -> list[LocationDict]:
+    fate_list: list[LocationDict] = []
 
     _id = 8000
     for key in list(fate_zones.keys()):
@@ -291,7 +379,7 @@ def generate_fate_list():
                     {
                         "name": name,
                         "region": row['Location'],
-                        "category": ["FATEsanity", row['Location']],
+                        "category": ["FATEsanity", row['Location'], "Fêtes"],
                         # "requires": "{anyCrafterLevel(" + str(max(level - 5, level // 10 * 10)) + ")}",
                         "level" : row['Level Sync'],
                         "filler": True,
@@ -324,8 +412,9 @@ def generate_fate_list():
     if missing_fatesanity_zones:
         # This is hacky, but it lets me slowly scrape the wiki for FATEs without abusing the API
         for key in list(missing_fatesanity_zones.keys()):
-            from . import wiki_scraper
             import os
+
+            from . import wiki_scraper
             additional = wiki_scraper.find_fates(key)
             fates_path = os.path.join(os.path.dirname(__file__), 'fates.csv')
             with open(fates_path, 'a', newline='') as csvfile:
@@ -335,18 +424,18 @@ def generate_fate_list():
 
     return fate_list
 
-def generate_fish_list() -> list[dict]:
+def generate_fish_list() -> list[LocationDict]:
     _id = 20_000
     from ..Helpers import load_data_file
     fish = load_data_file("fish.json")
     removed_fish = load_data_file("removed_locations.json")
 
-    locations = []
+    locations: list[LocationDict] = []
     for name, data in fish.items():
         requires = f"|5 FSH Levels:{data['lvl'] // 5}|"
 
         zones = data['zones']
-        if not zones:
+        if not zones or "The *Endeavor*" in zones:
             _id += 1
             continue
         intuition = data['logical_intuition']
@@ -361,6 +450,7 @@ def generate_fish_list() -> list[dict]:
             if not zones[region]:
                 _id += 1
                 continue
+
             if len(zones[region]) > 1:
                 requires += f" and (|{zones[region][0]}"
                 i = 0
@@ -383,7 +473,7 @@ def generate_fish_list() -> list[dict]:
         for bait in chain.from_iterable(zones.values()):
              bait_to_fish.setdefault(bait, set()).add(name)
 
-        loc = {
+        loc: LocationDict = {
             "name": name,
             "category": ['Fish', "fishsanity"] + list(zones.keys()) + (["Big Fishing"] if data.get('bigfish') else []) + (["Timed Fish"] if data.get('timed') else []),
             "region": region,
@@ -428,60 +518,29 @@ def generate_bait_list() -> list[dict]:
 # if you need access to the items after processing to add ids, etc., you should use the hooks in World.py
 def after_load_item_file(item_table: list) -> list:
     item_table.extend(generate_bait_list())
-    classes = TANKS + HEALERS + MELEE + RANGED + CASTER + ["BLU"]
-    # crafters
-    DOH = [
-        "CRP",
-        "BSM",
-        "ARM",
-        "GSM",
-        "LTW",
-        "WVR",
-        "ALC",
-        "CUL",
-    ]
 
-    # gatherers
-    DOL = [
-        "MIN",
-        "BTN",
-        "FSH",
-        ]
-    max_level = 100
-    max_blu = 80
+    from ..Helpers import load_data_file
+    classes = cast(list[dict], load_data_file("items.levels.json"))
 
-    level_items = []
     for job in classes:
+        max_level = LIMITED_LEVEL_CAPS.get(job['abbreviation'], LEVEL_CAP)
         n = int(max_level / 5)
-        if job == "BLU":
-            n = int(max_blu / 5)
 
-        level_items.append({
-            "name": f"5 {job} Levels",
-            "category": ["Class Level", "DOW/DOM"],
+        category = 'DoW/DoM'
+        if job in DOH:
+            category = 'DoH'
+        elif job in DOL:
+            category = 'DoL'
+        job.update({
+            "category": ["Class Level", category],
             "count": 0,
             "max_count": n,
             "filler": True,
         })
 
-    for job in DOH:
-        level_items.append({
-            "name": f"5 {job} Levels",
-            "category": ["Class Level", "DOH"],
-            "count": 0,
-            "max_count": int(max_level / 5),
-            "filler": True,
-        })
-    for job in DOL:
-        level_items.append({
-            "name": f"5 {job} Levels",
-            "category": ["Class Level", "DOL"],
-            "count": 0,
-            "max_count": int(max_level / 5),
-            "filler": True,
-        })
-    level_items[0]['id'] = 5_000
-    item_table.extend(level_items)
+    item_table.extend(classes)
+    pomanders = cast(list[dict], load_data_file("items.deepdungeon.json"))
+    item_table.extend(pomanders)
 
     # Add clear items related to the boss goal locations. Prerequisites for victory button
     _cleared_id = 40_000
@@ -514,8 +573,8 @@ def after_load_progressive_item_file(progressive_item_table: list) -> list:
 
 # called after the locations.json file has been loaded, before any location loading or processing has occurred
 # if you need access to the locations after processing to add ids, etc., you should use the hooks in World.py
-def generate_hunt_list() -> list[dict]:
-    hunt_list = []
+def generate_hunt_list() -> list[LocationDict]:
+    hunt_list: list[LocationDict] = []
     _id = 45_000
     huntreader = csv.DictReader(pkgutil.get_data(__name__, "hunts.csv").decode().splitlines(), delimiter=',', quotechar='"')
 
@@ -539,9 +598,9 @@ def generate_hunt_list() -> list[dict]:
 
     return hunt_list
 
-def generate_aetheryte_list() -> list[dict]:
+def generate_aetheryte_list() -> list[LocationDict]:
     from ..Helpers import load_data_file
-    aetheryte_list = []
+    aetheryte_list: list[LocationDict] = []
     _id = 50_000
     aetherytes = load_data_file("aetherytes.json")
     for ae in aetherytes:
@@ -557,7 +616,7 @@ def generate_aetheryte_list() -> list[dict]:
 
     return aetheryte_list
 
-def after_load_location_file(location_table: list) -> list:
+def after_load_location_file(location_table: list[LocationDict]) -> list[LocationDict]:
     #add FATE locations
     duty_locations, extra_duty_locations = generate_duty_list()
 
@@ -584,8 +643,8 @@ def after_load_region_file(region_table: dict) -> dict:
             region_table[e]['connects_to'].append(r)
     return region_table
 
-def create_FATE_location(number: int, key: str, lvl: int, _id: int = None):
-    location = {
+def create_FATE_location(number: int, key: str, lvl: int, _id: int | None = None) -> LocationDict:
+    location: LocationDict = {
             "name": key + ": FATE #" + str(number),
             "region": key,
             "category": ["FATEs", key],
@@ -608,7 +667,7 @@ def create_FATE_location(number: int, key: str, lvl: int, _id: int = None):
 def ocean_fishing():
     _id = 19_000
     indigo_route = ["Rhotano Sea", "Bloodbrine Sea", "Rothlyt Sound", "Northern Strait of Merlthor"]
-    ruby_route = ["Ruby Sea", "One River", "Thavnairian Coast"]
+    ruby_route = ["Ruby Price", "One River", "Thavnairian Coast"]
 
     locations = []
     for route in indigo_route:

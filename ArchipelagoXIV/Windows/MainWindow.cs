@@ -70,7 +70,8 @@ public class MainWindow : SharedWindow
         if (APData.Regions.TryGetValue(regionname, out var currentRegion))
             canReach = currentRegion.Reachable;
 
-        ImGui.TextColored(canReach ? new Vector4(0.4f, 1f, 0.4f, 1f) : new Vector4(1f, 0.4f, 0.4f, 1f),
+        var LogicGreen = new Vector4(0.4f, 1f, 0.4f, 1f);
+        ImGui.TextColored(canReach ? LogicGreen : new Vector4(1f, 0.4f, 0.4f, 1f),
             $"Current location in logic: {canReach}");
 
         ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1f), state?.Game?.GoalString() ?? "");
@@ -79,10 +80,6 @@ public class MainWindow : SharedWindow
         {
             ImGui.TextColored(new Vector4(1f, 0.3f, 0.3f, 1f), "Death Link is enabled.");
         }
-
-        ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.6f, 0.9f, 1f, 1f), "Available Checks:");
-        ImGui.Separator();
 
         if (state?.MissingLocations == null)
         {
@@ -93,10 +90,22 @@ public class MainWindow : SharedWindow
             var location = state.AllLocations.FirstOrDefault(l => l.Name == state.territoryName);
             if (location is DutyLocation dutyLocation)
             {
-                ImGui.TextColored(ImGuiColors.DalamudOrange, $"Current Duty: {dutyLocation.DisplayText}");
-
+                if (dutyLocation.Completed)
+                    ImGui.TextColored(ImGuiColors.DalamudGrey, $"Current Duty: {dutyLocation.DisplayText} (Already completed)");
+                else if (dutyLocation.IsAccessible())
+                    ImGui.TextColored(LogicGreen, $"Current Duty: {dutyLocation.DisplayText}");
+                else
+                    ImGui.TextColored(ImGuiColors.DalamudRed, $"Current Duty: {dutyLocation.DisplayText} (Not in logic)");
+            }
+            else
+            {
+                ImGui.TextColored(ImGuiColors.DalamudGrey, $"Current Duty: {state.territoryName} (Not in seed)");
             }
         }
+
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.6f, 0.9f, 1f, 1f), "Available Checks:");
+        ImGui.Separator();
         //ImGui.Indent(55);
         var relevantLocations = new List<Location>();
         var hintedLocations = new List<Location>();
@@ -105,7 +114,7 @@ public class MainWindow : SharedWindow
 
         foreach (var location in state.MissingLocations)
         {
-            if (location is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true))
+            if (location is DutySubLocation subLocation && !(subLocation.parent?.Completed ?? true) && subLocation.HintedItem == null)
                 continue;
 
             if (location.Accessible)

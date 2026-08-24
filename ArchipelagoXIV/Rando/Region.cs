@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ArchipelagoXIV.Rando.Locations;
+using Lumina.Excel.Sheets;
 
 namespace ArchipelagoXIV.Rando
 {
@@ -98,6 +99,15 @@ namespace ArchipelagoXIV.Rando
 
         public static string LocationToRegion(string name, uint territoryId = 0)
         {
+            if (territoryId > 0)
+            {
+                if (APData.RegionsByTerritoryType.TryGetValue(territoryId, out var region))
+                    return region.Name;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+                return name;
+
             if (name.StartsWith("Crystalline Conflict (Custom Match - "))
                 name = name[37..^1];
 
@@ -135,14 +145,25 @@ namespace ArchipelagoXIV.Rando
 
         internal bool stale;
         internal bool Reachable;
+        public string LocalizedName { get; init; }
 
-        public Region(string name, string[] connections, Func<ApState, bool, bool>? requirements = null)
+        public Region(string name, string[] connections, Func<ApState, bool, bool>? requirements = null, uint[] territoryTypeIds = null)
         {
             APData.Regions.Add(name, this);
+            if (territoryTypeIds != null && territoryTypeIds.Length > 0)
+            {
+                foreach (var id in territoryTypeIds)
+                    APData.RegionsByTerritoryType[id] = this;
+                var territoryType = DalamudApi.DataManager.GetExcelSheet<TerritoryType>().FirstOrDefault(t => territoryTypeIds.Contains(t.RowId));
+                LocalizedName = territoryType.PlaceName.Value.Name.ExtractText();
+            }
+
             Name = name;
             this.stale = true;
             this._connections = connections;
             this.MeetsRequirements = requirements ?? Logic.Always();
+            if (string.IsNullOrEmpty(LocalizedName))
+                LocalizedName = name;
         }
     }
 }
