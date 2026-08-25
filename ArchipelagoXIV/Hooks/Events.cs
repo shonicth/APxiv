@@ -132,10 +132,9 @@ namespace ArchipelagoXIV.Hooks
                 return;
             var territory = apState.territory = Data.Territories.FirstOrDefault(row => row.RowId == territoryType.RowId);
             var duty = args.ContentFinderCondition.Value;
-            if (!APData.ContentIDToLocationName.TryGetValue(duty.Content.RowId, out var name))
-            {
-                name = duty.Name.ExtractText();
-            }
+            Location? location = apState.AllLocations.OfType<DutyLocation>().FirstOrDefault(l => l.Content.RowId == duty.Content.RowId);
+
+            var name = duty.Name.ExtractText();
             if (name == "Ocean Fishing")
             {
                 var oceanfishing = EventFramework.Instance()->GetInstanceContentOceanFishing();
@@ -182,10 +181,15 @@ namespace ArchipelagoXIV.Hooks
                     }
                 }
 
-                var location = apState.MissingLocations.FirstOrDefault(l => l.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
+                location ??= apState.MissingLocations.FirstOrDefault(l => l.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
                 if (location == null)
                 {
-                    DalamudApi.Echo("Location already completed or not in seed, nothing to do.");
+                    DalamudApi.Echo("Location not in seed, nothing to do.");
+                    return;
+                }
+                else if (location.Completed)
+                {
+                    DalamudApi.Echo("Location already completed, nothing to do.");
                     return;
                 }
 

@@ -1,6 +1,8 @@
 using ArchipelagoXIV.Rando.Locations;
+using Lumina.Excel.Sheets;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,6 +13,8 @@ namespace ArchipelagoXIV.Rando
 {
     internal static class APData
     {
+        internal record AetheryteInfo(uint apid, string Name, TerritoryType Territory, uint AttunePlace);
+
         public static Dictionary<string, string> Aliases = new() {
             // Cities
             { "Limsa Lominsa Lower Decks", "Limsa Lominsa"},
@@ -76,21 +80,31 @@ namespace ArchipelagoXIV.Rando
         public static readonly Dictionary<string, string> HuntRankData = [];
 
         public static Dictionary<string, Dictionary<string, string>> ObsoleteChecks { get; private set; } = [];
+        public static FrozenDictionary<uint, AetheryteInfo> Aetherytes { get; private set; }
 
         public static void LoadDutiesCsv()
         {
-            string[] headers = ["", "Name", "ARR", "HW", "STB", "SHB", "EW", "DT"];
+            string[] headers;
             using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArchipelagoXIV.duties.csv");
             using var reader = new StreamReader(stream);
             string? line = null;
+            headers = reader.ReadLine()?.Split(',') ?? [];
+            var iName = Array.IndexOf(headers, "Name");
+            var iLocation = Array.IndexOf(headers, "Location");
+            var iContentFinderID = Array.IndexOf(headers, "ContentFinderID");
             while ((line = reader.ReadLine()) != null)
             {
                 var row = line.Split(',');
-                if (headers.Contains(row[0].Trim()))
+                if (string.IsNullOrWhiteSpace(row[iName].Trim()))
                     continue;
-                if (row[0].StartsWith('"'))
-                    row[0] = row[0].Trim('"');
-                Aliases[row[0].Trim()] = row[4].Trim();
+
+                if (row[iName].StartsWith('"'))
+                    row[iName] = row[iName].Trim('"');
+                Aliases[row[iName].Trim()] = row[iLocation].Trim();
+                if (ushort.TryParse(row[iContentFinderID].Trim(), out var contentFinderId))
+                {
+                    CheckNameToContentID[row[iName].Trim()] = contentFinderId;
+                }
             }
         }
 
@@ -227,6 +241,29 @@ namespace ArchipelagoXIV.Rando
                 APData.FishData[fish.Value<string>("name")] = data;
 
             }
+        }
+
+        internal static void LoadAetherytes()
+        {
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArchipelagoXIV.aetherytes.json");
+            using var reader = new StreamReader(stream);
+            var aetheryte_data = JArray.Parse(reader.ReadToEnd());
+            var aetherytes = new Dictionary<uint, AetheryteInfo>();
+            var gamedata = DalamudApi.DataManager.GetExcelSheet<Aetheryte>()
+                .Where(a => a.PlaceName.RowId > 10 && a.IsAetheryte).ToDictionary(a => a.RowId);
+
+            foreach (JObject aetheryte in aetheryte_data)
+            {
+                var id = aetheryte.Value<uint>("id");
+                var apid = 50000 + id;
+                var name = gamedata[id].PlaceName.Value.Name.ExtractText();
+                var territory = gamedata[id].Territory.Value;
+                var attunePlace = aetheryte.Value<uint>("place_id");
+                var info = new AetheryteInfo(apid, name, territory, attunePlace);
+                aetherytes[apid] = info;
+
+            }
+            APData.Aetherytes = aetherytes.ToFrozenDictionary();
         }
     }
 }

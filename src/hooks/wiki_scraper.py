@@ -1021,6 +1021,9 @@ def cat_region_table(spot_id):
 def data_path(filename: str) -> str:
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', filename)
 
+def hooks_path(filename: str) -> str:
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), 'hooks', filename)
+
 def clean_fish():
     all_fish = load_all_fish()
     for fish in all_fish.values():
@@ -1044,9 +1047,15 @@ def scrape_aetherytes() -> None:
     aetherytes = datamining_csv('Aetheryte')
     places = datamining_csv('PlaceName')
     territory_type = datamining_csv("TerritoryType")
-    aetheryte_locations = []
+    aetheryte_locations = load_data_file('aetherytes.json')
+    known_ids = {a['id']: a for a in aetheryte_locations}
+    place_name_to_id = {p['Name']: int(p['#']) for p in reversed(list(places.values()))}
     for aetheryte in aetherytes.values():
-        location_data: dict[str, Any] = {}
+        if int(aetheryte['#']) in known_ids:
+            location_data: dict[str, Any] = known_ids[int(aetheryte['#'])]
+        else:
+            location_data = {}
+
         location_data['id'] = int(aetheryte['#'])
         if aetheryte['IsAetheryte'] != 'True':
             continue
@@ -1059,7 +1068,16 @@ def scrape_aetherytes() -> None:
         territory = territory_type[map['TerritoryType']]
         location_data['expansion'] = _EX_VERSION_DATA[territory['ExVersion']][0]
         location_data['level'] = _EX_VERSION_DATA[territory['ExVersion']][1]
-        aetheryte_locations.append(location_data)
+
+        if f'{place['Name']} Aetheryte Plaza' in place_name_to_id:
+            location_data.setdefault("place_name", f'{place["Name"]} Aetheryte Plaza')
+        else:
+            location_data.setdefault("place_name", place["Name"])
+        location_data.setdefault("place_id", place_name_to_id.get(location_data.get("place_name", place["Name"]), int(place["#"])))
+
+        if int(aetheryte['#']) not in known_ids:
+            aetheryte_locations.append(location_data)
+
     save_data_file('aetherytes.json', aetheryte_locations, indent=1)
 
 def scrape_territory_types() -> None:
@@ -1115,21 +1133,69 @@ def scrape_deep_dungeon_items() -> None:
     for item in items_deepdungeon:
         item.setdefault('category', ['Pomander'])
         if item.setdefault('potd', False):
-            item['category'].append("The Palace of the Dead Pomander")
+            item['category'].append("The Palace of the Dead Pomanders")
         if item.setdefault('hoh', False):
-            item['category'].append("Heaven-on-High Pomander")
+            item['category'].append("Heaven-on-High Pomanders")
         if item.setdefault('eo', 'Protomander' in item['name']):
             item['category'].append("Eureka Orthos Protomanders")
         if item.setdefault('pt', False):
-            item['category'].append("Pilgrim's Traverse Pomander")
+            item['category'].append("Pilgrim's Traverse Pomanders")
         item['category'] = sorted(set(item['category']))
 
 
     items_deepdungeon.sort(key=lambda x: x['id'])
     save_data_file('items.deepdungeon.json', items_deepdungeon, indent=4)
 
+def scrape_duties() -> None:
+    content_finder_conditions = datamining_csv('ContentFinderCondition')
+    dynamic_events = datamining_csv('DynamicEvent')
+    with open(hooks_path("duties.csv")) as f:
+        dutyreader = csv.DictReader(f.readlines(), delimiter=',', quotechar='"')
+        duties = list(dutyreader)
+    headers = dutyreader.fieldnames
+    assert headers is not None
+
+    for duty in duties:
+        name = duty['Name']
+        if not name:
+            continue
+        cfid = duty.get('ContentFinderID', None)
+        deid = duty.get('DynamicEventID', None)
+        if cfid and isinstance(cfid, str):
+            cfid = int(cfid)
+        if deid and isinstance(deid, str):
+            deid = int(deid)
+
+        if cfid is None:
+            for cfc in content_finder_conditions.values():
+                if cfc['Name'].casefold().strip().replace('*', '') == name.casefold().strip():
+                    cfid = duty['ContentFinderID'] = int(cfc['#'])
+                    break
+            else:
+                cfid = duty['ContentFinderID'] = 0
+        if cfid == 0 and deid is None:
+            for de in dynamic_events.values():
+                if de['Name'].casefold().strip() == name.casefold().strip():
+                    deid = duty['DynamicEventID'] = int(de['#'])
+                    break
+
+        if not cfid and not deid:
+            print(f"WARNING: Could not find ContentFinderCondition or DynamicEvent for {name}")
+            continue
+
+        if cfid and int(cfid) > 0 and (cf := content_finder_conditions.get(str(cfid))):
+            if not duty["Level Sync"]:
+                duty["Level Sync"] = cf.get('ClassJobLevelSync','')
+            if not duty["Ilvl Sync"]:
+                duty["Ilvl Sync"] = cf.get('ItemLevelRequired','')
+
+    with open(hooks_path("duties.csv"), "w", newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=headers, delimiter=',', quotechar='"')
+        writer.writeheader()
+        writer.writerows(duties)
 
 if __name__ == "__main__":
+    scrape_duties()
     scrape_classjobs()
     scrape_aetherytes()
     scrape_deep_dungeon_items()
