@@ -128,7 +128,7 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
     has_dungeons = get_int_value(multiworld, player, 'dungeon_count') > 0 and has_duties
     has_fish = is_option_enabled(multiworld, player, 'fishsanity')
     has_hunts = bool(get_option_value(multiworld, player, 'huntsanity'))
-    has_potd = is_option_enabled(multiworld, player, 'include_potd')
+    has_potd = is_option_enabled(multiworld, player, 'include_potd') and has_duties
 
     if not has_fates and not has_dungeons and not has_fish and not has_hunts and not has_potd:
         raise OptionError("You can't disable everything.")
@@ -160,7 +160,7 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
         and get_int_value(multiworld, player, 'fates_per_zone') < 3
         and get_int_value(multiworld, player, 'extra_dungeon_checks') < 5
     ):
-        world.options.extra_dungeon_checks.value = 5
+        world.options.deep_dungeon_sanity.value = True
 
 
 
