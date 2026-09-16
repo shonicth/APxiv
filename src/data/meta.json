@@ -98,6 +98,10 @@
                     "extra_dungeon_checks": 10,
                     "huntsanity": ["B", "A", "S"]
                 },
+                "Aetherhike": {
+                    "duty_difficulty": "no_duties",
+                    "fates_per_zone": 0
+                },
                 "Free Trial": {
                     "level_cap": 80,
                     "goal": "Defeat Hades"
