@@ -642,6 +642,17 @@ class VersionedComponent(Component):
     def __init__(self, display_name: str, script_name: Optional[str] = None, func: Optional[Callable] = None, version: int = 0, file_identifier: Optional[Callable[[str], bool]] = None, icon: Optional[str] = None):
         super().__init__(display_name=display_name, script_name=script_name, func=func, component_type=Type.CLIENT, file_identifier=file_identifier, icon=icon)
         self.version = version
+        self.supports_uri = True
+
+    @property
+    def game_name(self) -> list[str]:
+        return [name for name in AutoWorldRegister.world_types.keys() if name.startswith("Manual_")]
+
+    @game_name.setter
+    def game_name(self, value: str):
+        # This needs to exist because the base class sets it to [] in the __init__ method
+        if value:
+            raise ValueError("Manual Client does not support setting game_name manually.")
 
 def add_client_to_launcher() -> None:
     version = 2026_04_07 # YYYYMMDD
