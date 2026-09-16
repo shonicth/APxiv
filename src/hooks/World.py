@@ -4,6 +4,7 @@ import math
 import os
 import pkgutil
 from typing import Any
+import logging
 
 import Utils
 from BaseClasses import CollectionState, Item, ItemClassification, LocationProgressType, MultiWorld, Entrance
@@ -101,9 +102,11 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
 
     force_jobs = get_set_value(multiworld, player, "force_jobs")
     excluded_jobs = get_excluded_jobs(multiworld, player)
-    all_jobs = set(TANKS + HEALERS + MELEE + CASTER + RANGED + DOH)
+    all_jobs = set(TANKS + HEALERS + MELEE + CASTER + RANGED)
     if not force_jobs and len(all_jobs - excluded_jobs) == 0:
-        raise OptionError("You can't exclude all non-limited combat jobs.")
+        slot_name = multiworld.player_name[player]
+        logging.warning(f"{slot_name}: You can't exclude all non-limited combat jobs, ignoring excluded_jobs.")
+        world.options.exclude_jobs.value = []
 
     goal = victory_names[get_option_value(multiworld, player, 'goal')]  # type: ignore
     goal_location = next(loc for loc in location_table if loc.get('victory') and loc['name'] == goal)
