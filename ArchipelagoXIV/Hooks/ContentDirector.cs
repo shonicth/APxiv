@@ -13,6 +13,7 @@ namespace ArchipelagoXIV.Hooks
 
         private ApState apState;
         private DutyLocation? CurrentDuty;
+        private uint currentcf = 0;
 
         public ContentDirector(ApState apState)
         {
@@ -26,10 +27,15 @@ namespace ArchipelagoXIV.Hooks
             if (!DalamudApi.DutyState.IsDutyStarted)
                 return;
 
-            if (CurrentDuty == null || CurrentDuty.Content.RowId != DalamudApi.DutyState.ContentFinderCondition.Value.RowId)
+            if (currentcf != DalamudApi.DutyState.ContentFinderCondition.Value.RowId)
             {
+                currentcf = DalamudApi.DutyState.ContentFinderCondition.Value.RowId;
                 CurrentDuty = apState.AllLocations.OfType<DutyLocation>().FirstOrDefault(d => d.Content.RowId == DalamudApi.DutyState.ContentFinderCondition.Value.RowId);
+                DutyProgress = 0;
             }
+
+            if (CurrentDuty == null)
+                return;
 
             var contentType = DalamudApi.DutyState.ContentFinderCondition.Value.ContentType.Value;
             if (contentType.RowId == 21)
@@ -45,7 +51,10 @@ namespace ArchipelagoXIV.Hooks
                 // Not a supported content type for progress tracking
                 return;
             }
+        }
 
+        private unsafe void SendSubCheck()
+        {
             if (CurrentDuty != null && DutyProgress > 0 && CurrentDuty.SubLocations.Length >= DutyProgress)
             {
                 CurrentDuty.SubLocations[DutyProgress - 1].Complete();
@@ -73,6 +82,7 @@ namespace ArchipelagoXIV.Hooks
             {
                 DutyProgress = progress;
                 DalamudApi.Echo($"Duty Progress: {DutyProgress}");
+                SendSubCheck();
             }
         }
 
@@ -82,12 +92,19 @@ namespace ArchipelagoXIV.Hooks
             if (contentDirector == null)
                 return;
 
-            var dutyProgress = contentDirector->Floor;
+            int dutyProgress = contentDirector->Floor;
+            if (dutyProgress > 10)
+            {
+                dutyProgress = dutyProgress % 10;
+                if (dutyProgress == 0)
+                    dutyProgress = 10;
+            }
+
             if (dutyProgress != DutyProgress)
             {
                 DutyProgress = dutyProgress;
-                DalamudApi.Echo($"Deep Dungeon Floor: {DutyProgress}");
-                // TODO: Send per-floor checks
+                DalamudApi.Echo($"Deep Dungeon Floor: {contentDirector->Floor}");
+                SendSubCheck();
             }
         }
     }
