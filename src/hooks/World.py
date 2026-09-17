@@ -4,6 +4,7 @@ import math
 import os
 import pkgutil
 from typing import Any
+import logging
 
 import Utils
 from BaseClasses import CollectionState, Item, ItemClassification, LocationProgressType, MultiWorld, Entrance
@@ -101,13 +102,15 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
 
     force_jobs = get_set_value(multiworld, player, "force_jobs")
     excluded_jobs = get_excluded_jobs(multiworld, player)
-    all_jobs = set(TANKS + HEALERS + MELEE + CASTER + RANGED + DOH)
+    all_jobs = set(TANKS + HEALERS + MELEE + CASTER + RANGED)
     if not force_jobs and len(all_jobs - excluded_jobs) == 0:
-        raise OptionError("You can't exclude all non-limited combat jobs.")
+        slot_name = multiworld.player_name[player]
+        logging.warning(f"{slot_name}: You can't exclude all non-limited combat jobs, ignoring excluded_jobs.")
+        world.options.exclude_jobs.value = []
 
     goal = victory_names[get_option_value(multiworld, player, 'goal')]  # type: ignore
     goal_location = next(loc for loc in location_table if loc.get('victory') and loc['name'] == goal)
-    level_cap = get_option_value(multiworld, player, 'level_cap')
+    level_cap = get_int_value(multiworld, player, 'level_cap')
     goal_level = goal_location.get('level', 0)
     if not get_option_value(multiworld, player,"include_dungeons"):
         world.options.dungeon_count.value = 0
@@ -119,7 +122,7 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
         world.mcguffins_needed = 50
 
     if goal_level and goal_level > level_cap:
-        raise OptionError(f"The selected goal '{goal}' requires level {goal_location.get('level')}, which exceeds the level cap of {level_cap}.")
+        world.options.level_cap.value = goal_level
 
     has_fatesanity = get_option_value(multiworld, player, 'fatesanity')
     fate_count = get_int_value(multiworld, player, 'fates_per_zone')
@@ -131,10 +134,8 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
     has_potd = is_option_enabled(multiworld, player, 'include_potd') and has_duties
 
     if not has_fates and not has_dungeons and not has_fish and not has_hunts and not has_potd:
-        raise OptionError("You can't disable everything.")
-
-    if has_hunts and level_cap < 50:
-        raise OptionError("Huntsanity requires a level cap of at least 50.")
+        # We're going for a walk, we don't need to worry about restrictive start adjustments
+        return
 
     if has_hunts and not has_dungeons and not has_fish and (not has_fates or fate_count < 2):
         raise OptionError("Enable at least 2 fates per zone, or other locations, to use huntsanity.")
@@ -379,8 +380,11 @@ def before_create_items_all(item_config: dict[str, int|dict], world: World, mult
         item_config['Memory of a Distant World'] = 0
         world.mcguffins_needed = 0
     else:
-        item_config['Memory of a Distant World'] = min(remaining // 4, 50)
+        item_config['Memory of a Distant World'] = max(1, min(remaining // 4, 50))
         world.mcguffins_needed = int(item_config['Memory of a Distant World'] * (get_int_value(multiworld, player, "mcguffin_percentage_needed") / 100))
+        if world.mcguffins_needed == 0:
+            world.mcguffins_needed = 1
+
     item_count += item_config['Memory of a Distant World']
 
     if is_fishing_enabled(multiworld, player):
