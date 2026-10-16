@@ -34,8 +34,9 @@ namespace ArchipelagoXIV.Hooks
                 CurrentDuty = apState.AllLocations.OfType<DutyLocation>().FirstOrDefault(d => d.Content.RowId == DalamudApi.DutyState.ContentFinderCondition.Value.RowId);
                 DutyProgress = 0;
             }
+            var contentType = DalamudApi.DutyState.ContentFinderCondition.Value.ContentType.Value;
 
-            if (DalamudApi.DutyState.ContentFinderCondition.Value.ContentType.Value.RowId == 29 || DalamudApi.DutyState.ContentFinderCondition.Value.ContentType.Value.RowId == 38 )
+            if (contentType.RowId == 29 || contentType.RowId == 38 )
             {
                 DynamicContentUpdate();
             }
@@ -43,7 +44,6 @@ namespace ArchipelagoXIV.Hooks
             if (CurrentDuty == null)
                 return;
 
-            var contentType = DalamudApi.DutyState.ContentFinderCondition.Value.ContentType.Value;
             if (contentType.RowId == 21)
             {
                 DeepDungeonUpdate();
@@ -63,6 +63,16 @@ namespace ArchipelagoXIV.Hooks
         {
             if (CurrentDuty != null && DutyProgress > 0 && CurrentDuty.SubLocations.Length >= DutyProgress)
             {
+                if (!CurrentDuty.IsAccessible())
+                {
+                    DalamudApi.PluginLog.Debug($"{CurrentDuty.Name} currently out of logic.");
+                    return;
+                }
+                if (!CurrentDuty.CanClearAsCurrentClass())
+                {
+                    DalamudApi.PluginLog.Debug($"Cannot clear {CurrentDuty.Name} as current class");
+                    return;
+                }
                 CurrentDuty.SubLocations[DutyProgress - 1].Complete();
             }
         }
