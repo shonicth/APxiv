@@ -86,43 +86,14 @@ BOSS_GOAL_DATA: dict[str, tuple[str, str, int]] = {
     "Defeat Necron":               ("Ageless Necropolis",   "Living Memory",    100),
 }
 
-ACHIEVEMENT_FATES = [
-    "Poor Maid's Mess (FATE)", "Poor Maid's Mishap (FATE)", "Poor Maid's Misfortune (FATE)",
-    "It's Not Lupus (FATE)",
-    "Lazy for You (FATE)",
-    "Breaching the Hive (FATE)", "Clearing the Hive (FATE)", "Defending the Hive (FATE)", "Keeping the Hive (FATE)",
-    "Attack on Highbridge: Prelude (FATE)", "Attack on Highbridge: Denouement (FATE)", "Attack on Highbridge: Act I (FATE)", "Attack on Highbridge: Act II (FATE)", "Attack on Highbridge: Act III (FATE)",
-    "Dark Devices - The Plea (FATE)", "Dark Devices - The Bait (FATE)", "Dark Devices - The Switch", "Dark Devices - The End",
-    "Go, Go, Gorgimera (FATE)",
-    "Svara's Flight (FATE)", "Svara's Fear (FATE)", "Svara's Fall (FATE)", "Svara's Fury (FATE)",
-    "The Eyes Have It (FATE)",
-    "We Fought a Dzu (FATE)",
-    "Special Tarasque Force (FATE)",
-    "Darkscale Descendeth (FATE)", "Darkscale Disappeareth (FATE)", "Darkscale Devoureth (FATE)", "Vedrfolnir Devoteth (FATE)",
-    "On Dangerous Ground (FATE)",
-    "Metal Gears Rising (FATE)", "Metal Gears Revengeance (FATE)", "Metal Gears Revengeance 2 (FATE)",
-    "The Evil Seed (FATE)",
-    "Mouth for Water (FATE)",
-    "Rattle and Humbaba (FATE)",
-    "Tall Tale (FATE)",
-    "Never Say Daimyo (FATE)",
-    "The Dataqi Chronicles: Departures (FATE)", "The Dataqi Chronicles: Distractions (FATE)", "The Dataqi Chronicles: Duty (FATE)", "The Dataqi Chronicles: Deprivation (FATE)", "The Dataqi Chronicles: Deterrence (FATE)", "The Dataqi Chronicles: Desperation (FATE)", "The Dataqi Chronicles: Distress (FATE)", "The Dataqi Chronicles: Displacement (FATE)", "The Dataqi Chronicles: Diplomacy (FATE)", "The Dataqi Chronicles: Decimation (FATE)", "The Dataqi Chronicles: Divergence (FATE)", "The Dataqi Chronicles: Declarations (FATE)", "The Dataqi Chronicles: Dominion (FATE)",
-    "Wham, Bam, Thank You, Mammoth (FATE)",
-    "Curiosity Killed the Catfish (FATE)",
-    "Subtle Nightshade (FATE)", "Toxic Nightshade (FATE)", "Deadly Nightshade (FATE)",
-    "Frog Standard (FATE)", "Great Daens (FATE)", "Fuath of Habit (FATE)", "Back and Fuath (FATE)", "Brute Fuath (FATE)", "Breaking the Fuath Wall (FATE)", "Go Fuath a Conqueror (FATE)", "Fuath to Be Reckoned With (FATE)",
-    "Barking Mad (FATE)", "Creepy Crawlers (FATE)", "Pluck of the Draw (FATE)", "The End of the Sentry (FATE)", "Tojil War (FATE)", "Tojil Annihilation (FATE)", "Tojil Carnage (FATE)", "Tojil Eclipse (FATE)",
-    "Scavengers Hunted (FATE)", "Reptilian Roadblock (FATE)", "Cactus Makes Perfect (FATE)", "Theft from Above (FATE)", "Sand and Deliver (FATE)", "This Time, It's Personal (FATE)", "Armadillo Peccadillo (FATE)", "The Elderblade (FATE)",
-    ]
-
 UNREASONABLE_FATES = [
-    "Behold Now Behemoth (FATE)", "He Taketh It with His Eyes (FATE)", "Steel Reign (FATE)",
+    "Behold Now Behemoth", "He Taketh It with His Eyes (FATE)", "Steel Reign (FATE)",
     "Long Live the Coeurl (FATE)", "Coeurls Chase Boys (FATE)", "Coeurls Chase Boys Chase Coeurls (FATE)", "Prey Online (FATE)",
     "A Horse Outside (FATE)", "Foxy Lady (FATE)",
     "Nothing Like a Trappin' Life (FATE)", "A Finale Most Formidable (FATE)", "The Head the Tail the Whole Damned Thing (FATE)",
-    
+    "Subtle Nightshade", "Toxic Nightshade", "Deadly Nightshade",  # Not a world boss, but a very messy fate chain that frequently fails due to conflicting FATEs being up.
     "Devout Pilgrims vs. Daivadipa (FATE)", "Omicron Recall: Killing Order (FATE)",
-    "The Serpentlord Seethes (FATE)", "Mascot Murder (FATE)",
+    "The Serpentlord Seethes", "Mascot Murder",
     ]
 
 FILLER_ITEMS = {
@@ -232,10 +203,10 @@ fate_zones = {
     "The Occult Crescent: South Horn": [100],
     "The Occult Crescent: North Horn": [100],
 
-    "Eureka Anemos": [61],
-    "Eureka Pagos": [61],
-    "Eureka Pyros": [61],
-    "Eureka Hydatos": [61],
+    "The Forbidden Land, Eureka Anemos": [70],
+    "The Forbidden Land, Eureka Pagos": [70],
+    "The Forbidden Land, Eureka Pyros": [70],
+    "The Forbidden Land, Eureka Hydatos": [70],
 }
 
 bait_to_fish: dict[str, set[str]] = {}
@@ -313,9 +284,8 @@ def generate_duty_list() -> tuple[list[LocationDict], list[LocationDict]]:
             if category != prev_category:
                 _id += 50
                 prev_category = category
-                pomanders_count = 0
                 location["id"] = _id
-            #if row["Location"] in ["Eureka Anemos", "Eureka Pagos", "Eureka Pyros", "Eureka Hydatos"]:
+            #if row["Location"] in ["The Forbidden Land, Eureka Anemos", "The Forbidden Land, Eureka Pagos", "The Forbidden Land, Eureka Pyros", "The Forbidden Land, Eureka Hydatos"]:
             #    location["category"].append("Eureka")
             if row["Location"] in ["Gangos", "The Bozjan Southern Front", "Zadnor"]:
                 location["category"].append("Bozja")
@@ -323,24 +293,12 @@ def generate_duty_list() -> tuple[list[LocationDict], list[LocationDict]]:
                 location["category"].append("Occult Crescent")
             if row["Location"] in ["The Palace of the Dead"]:
                 location["category"].append("The Palace of the Dead")
-                requires_str += " and {pomanderSoftLogicPotD(" + str(pomanders_count) + ")}"
-                location["requires"] = requires_str
-                pomanders_count = min(16, pomanders_count + 2)
             if row["Location"] in ["Heaven-on-High"]:
                 location["category"].append("Heaven-on-High")
-                requires_str += " and {pomanderSoftLogicHoH(" + str(pomanders_count) + ")}"
-                location["requires"] = requires_str
-                pomanders_count = min(16, pomanders_count + 3)
             if row["Location"] in ["Eureka Orthos"]:
                 location["category"].append("Eureka Orthos")
-                requires_str += " and {pomanderSoftLogicEO(" + str(pomanders_count) + ")}"
-                location["requires"] = requires_str
-                pomanders_count = min(16, pomanders_count + 3)
             if row["Location"] in ["Pilgrim's Traverse"]:
                 location["category"].append("Pilgrim's Traverse")
-                requires_str += " and {pomanderSoftLogicPT(" + str(pomanders_count) + ")}"
-                location["requires"] = requires_str
-                pomanders_count = min(16, pomanders_count + 3)
             duty_list.append(location)
             categorizedLocationNames.setdefault((content_type, expansion, location["diff"]), []).append(row["Name"])
             if "Dungeon" in row["Category"]:
@@ -693,7 +651,7 @@ def create_FATE_location(number: int, key: str, lvl: int, _id: int | None = None
         location["requires"] = "{anyClassLevel(" + str(lvl) + ")}"
     if lvl > 30 and number > 2:
         location["filler"] = True
-    if key in ["Eureka Anemos", "Eureka Pagos", "Eureka Pyros", "Eureka Hydatos"]:
+    if key in ["The Forbidden Land, Eureka Anemos", "The Forbidden Land, Eureka Pagos", "The Forbidden Land, Eureka Pyros", "The Forbidden Land, Eureka Hydatos"]:
         location["category"].append("Eureka")
     if key in ["The Bozjan Southern Front", "Zadnor"]:
         location["category"].append("Bozja")
