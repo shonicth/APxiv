@@ -137,8 +137,8 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
         # We're going for a walk, we don't need to worry about restrictive start adjustments
         return
 
-    if has_hunts and not has_dungeons and not has_fish and (not has_fates or fate_count < 2):
-        raise OptionError("Enable at least 2 fates per zone, or other locations, to use huntsanity.")
+    # if has_hunts and not has_dungeons and not has_fish and (not has_fates or fate_count < 2):
+    #     raise OptionError("Enable at least 2 fates per zone, or other locations, to use huntsanity.")
 
     #  Restrictive starts solvable with fates
     if (
@@ -159,7 +159,7 @@ def before_generate_early(world: World, multiworld: MultiWorld, player: int) -> 
         and not has_hunts
         and has_potd
         and get_int_value(multiworld, player, 'fates_per_zone') < 3
-        and get_int_value(multiworld, player, 'extra_dungeon_checks') < 5
+        and not is_option_enabled(multiworld, player, 'deep_dungeon_sanity')
     ):
         world.options.deep_dungeon_sanity.value = True
 
